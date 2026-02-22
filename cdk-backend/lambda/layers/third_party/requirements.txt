@@ -1,0 +1,2 @@
+boto3==1.40.5
+aws-lambda-powertools[all]==3.18.0
