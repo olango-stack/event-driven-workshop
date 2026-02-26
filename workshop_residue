@@ -1014,3 +1014,142 @@ If you're experiencing errors with your CDK file, you can validate your implemen
 Complete cdk_backend_stack.py with all Lab 1-3 changes
 Ready for the next step? Your event-driven backend is now complete and ready to handle asynchronous order processing. In Lab 4, you'll enhance the frontend with optimistic updates to create a seamless user experience that works perfectly with your new async architecture.
 
+
+
+
+Lab 4 - React Frontend Optimistic Updates
+Estimated Duration: 5 minutes
+
+This lab upgrades your frontend to include optimistic UI updates that provide immediate user feedback while your event-driven backend processes requests asynchronously. Instead of manually implementing all the optimistic update patterns, we'll deploy a pre-built version that demonstrates these advanced UX patterns with a non-blocking sidebar progress tracker.
+
+Prerequisites
+Completed Lab 3: Amazon EventBridge Rules and Amazon SQS Triggers
+What's New in the Upgraded Frontend
+Feature	Technology	User Experience
+Optimistic Updates	Instant UI changes	Zero perceived latency
+Sidebar Progress Tracking	Non-blocking progress sidebar	Continue shopping while orders process
+Multiple Order Support	Concurrent order tracking	Handle multiple orders simultaneously
+Error Handling	Graceful rollback	Clear retry mechanisms
+Visual Feedback	Loading indicators	Guided user expectations
+Status Polling	WebSocket-free updates	Long-running operation visibility
+Lab 4.1: Deploy the Enhanced Frontend to Amazon S3
+Deploy the enhanced frontend:
+
+1
+2
+cd /project/cdk-backend
+./deploy-async-frontend.sh
+
+Deployment Process (30 seconds)
+
+Workshop Deployment Approach
+In the interest of time, we use direct S3 deployment instead of CDK BucketDeployment. The async frontend has different filenames than the sync version, so we clear the bucket completely to prevent conflicts. Since CloudFront caching is disabled, files are served immediately without the 15-20 minute CloudFormation overhead.
+What happens during deployment:
+
+S3 Bucket Clear: Removes all existing frontend files to prevent conflicts
+Fresh Upload: Uploads the complete async frontend with optimistic updates
+Immediate Availability: New files are served instantly since CloudFront caching is disabled
+URL Display: Shows your frontend URL for testing
+Zero Downtime: Backend services remain unchanged
+Browser Refresh Required
+Important: After running the deployment script successfully, make sure to refresh your browser and clear your cache to see the changes. Use Ctrl+F5 (Windows/Linux) or Cmd+Shift+R (Mac) for a hard refresh.
+Lab 4.2: Test the Enhanced User Experience
+Access Your Application
+Get Amazon CloudFront URL: Find the URL in your AWS CDK deployment outputs and open the application in your web browser.
+
+Test Optimistic Cart Operations
+What You're Testing: Optimistic updates provide immediate UI feedback while API calls process in the background, creating instant responsiveness even with network latency.
+
+Add Items to Cart:
+
+Click "Add to Cart" on 2-3 different products
+Items appear instantly in cart sidebar with pending indicator (subtle opacity change)
+UI updates in <50ms, pending indicator disappears after API confirmation (~200-500ms)
+Cart count updates immediately in header, total price recalculates instantly
+Frontend optimistically adds item, sends API request, confirms or rolls back
+Update Quantities:
+
+Use +/- buttons to change item quantities in cart
+Quantity changes instantly, item shows pending state with visual feedback
+Visual feedback immediate, confirmation within 1-2 seconds
+Total price updates immediately, cart badge reflects new count
+Optimistic state update, API call to sync, error handling with rollback
+Remove Items:
+
+Click "X" button on cart items
+Item disappears from cart immediately with smooth animation
+Instant removal, no loading state needed
+Cart count and total update immediately, empty cart message if applicable
+Immediate UI removal, background API call, rollback if operation fails
+Test Enhanced Non-Blocking Checkout Flow
+What You're Testing: Asynchronous checkout with sidebar progress tracking demonstrates how to handle long-running operations in event-driven architectures while allowing users to continue browsing and shopping.
+
+Start Checkout Process:
+
+Click "Checkout" button, fill all required form fields (name, email, address, payment)
+Form validation works in real-time, "Place Order" button becomes active when valid
+Click "Place Order" button - button shows "Submitting..." state briefly
+Checkout modal closes immediately after successful submission
+Form data sent to Amazon API Gateway → Amazon EventBridge → checkout handler
+Monitor Sidebar Progress Tracker:
+
+Progress sidebar appears on the right side of screen automatically
+Order card shows order summary with customer name, total amount, and progress bar
+Stage 1: "Submitting order..." (10% - appears instantly as optimistic feedback)
+Stage 2: "Processing inventory..." (25% - within 5 seconds as inventory processor runs)
+Stage 3: "Authorizing payment..." (50% - within 10 seconds as payment processor executes)
+Stage 4: "Preparing for fulfillment..." (75% - within 15 seconds as fulfillment processor starts)
+Stage 5: "Finalizing order..." (90-100% - within 20 seconds as order completes)
+Frontend polls checkout status API every 2 seconds for real-time updates
+Async Order Progress The sidebar progress tracker shows real-time order processing stages while allowing continued shopping
+
+Continue Shopping During Processing:
+
+Add more items to cart while order processes (non-blocking experience)
+Submit additional orders to see concurrent tracking (multiple orders)
+Expand/collapse order details, dismiss completed orders (sidebar management)
+All progress updates happen via JavaScript polling, no page reload needed (real-time updates)
+Success notification when order reaches 'completed' state (completion)
+Status polling continues independently for each active order
+Test Multiple Concurrent Orders:
+
+Submit 2-3 orders in quick succession
+Sidebar shows multiple order cards, each with independent progress
+Each order progresses at its own pace, sidebar header shows count
+Click to expand/collapse individual order details
+Async Order Complete Multiple orders can be tracked simultaneously, with completed orders showing success status
+
+Verify Improved Responsiveness:
+
+All UI changes happen immediately (instant interactions)
+Can continue shopping while orders process (non-blocking flow)
+Clear indicators show processing states in sidebar (visual feedback)
+Loading states guide user expectations without blocking interaction (professional UX)
+Key UX Patterns Demonstrated
+Enhanced UX Patterns in This Implementation:
+
+Optimistic Updates: Cart changes appear instantly, masking network latency
+Visual Feedback: Pending indicators keep users informed about background processing
+Graceful Error Handling: Failed operations revert cleanly with clear messages
+Non-Blocking Progress Tracking: Sidebar progress allows continued browsing during order processing
+Multiple Order Support: Handle several concurrent orders with independent progress tracking
+Status Polling: Handles long-running async operations without WebSockets
+Enhanced User Experience: Loading states and animations create improved experience without blocking user flow
+Event-Driven Compatibility: Works seamlessly with asynchronous backend processing
+Benefits of This Approach
+Benefits Achieved in Your E-Commerce System:
+
+Immediate Responsiveness: Users see changes instantly, improving perceived performance
+Non-Blocking Experience: Users can continue shopping while orders process in background
+Transparent Processing: Sidebar progress keeps users engaged without blocking interaction
+Multiple Order Handling: Support for concurrent order processing and tracking
+Error Resilience: Operations fail gracefully with automatic rollback
+Event-Driven Compatibility: Works seamlessly with Amazon EventBridge and Amazon SQS-based processing
+Workshop User Experience: Demonstrates patterns used in modern e-commerce applications
+Scalability Support: UI patterns that work well with high-traffic, distributed systems
+Business Value: Improved user experience leads to higher conversion rates and customer satisfaction
+Workshop Achievement: This enhanced frontend effectively demonstrates how to create responsive, non-blocking user experiences that work seamlessly with event-driven backend architectures. By combining optimistic updates with sidebar progress tracking, you've created a system that provides transparency about complex async operations while maintaining complete user freedom to continue browsing and shopping. This approach is essential for modern e-commerce applications where user experience directly impacts business success, and backend systems must scale to handle thousands of concurrent orders without blocking the user interface.
+
+Optional: Manual Implementation Details
+Ready for advanced observability? Your complete event-driven e-commerce system now provides both excellent user experience and robust backend processing. In the optional Lab 5, you'll explore how to monitor and analyze your distributed system using Amazon CloudWatch Application Signals.
+
