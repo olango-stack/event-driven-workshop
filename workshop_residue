@@ -608,3 +608,409 @@ Ready for Lab 3! Your AWS Lambda function code is complete and ready to be deplo
 
 Next: Lab 3: Amazon EventBridge Rules and Amazon SQS Triggers →
 
+
+Lab 3 - Amazon EventBridge Rules and Amazon SQS Triggers
+Estimated Duration: 10 minutes
+
+Where you are: You've built the Amazon EventBridge integration (Lab 1) and created all the AWS Lambda function code for your processing pipeline (Lab 2). However, these components aren't connected yet - your AWS Lambda functions can't receive events from Amazon EventBridge or process messages from Amazon SQS queues.
+
+What you'll accomplish: Wire together your complete event-driven architecture by creating Amazon EventBridge rules that route events to the correct AWS Lambda handlers, establishing Amazon SQS event sources that trigger your processors, and configuring all the AWS IAM permissions needed for secure service-to-service communication. This serverless integration enables automatic scaling where each component scales independently based on demand - Amazon EventBridge scales with event volume, Amazon SQS scales with message throughput, and AWS Lambda functions scale with processing requirements, all without manual intervention.
+
+End goal: A fully operational event-driven e-commerce system where API requests trigger Amazon EventBridge events, which route to AWS Lambda handlers, which send messages to Amazon SQS queues, which trigger processing AWS Lambda functions - all working together seamlessly with proper error handling and observability. The serverless architecture automatically handles traffic spikes, scales down during quiet periods, and charges only for actual resource consumption across all components.
+
+Prerequisites
+Completed Lab 2: Amazon EventBridge Handlers and AWS Lambda Processors
+Access to AWS Console 
+Understanding of Amazon EventBridge rules and Amazon SQS triggers
+Lab 3.1: Add AWS Lambda Event Sources Import
+Why this step matters: Enable Amazon SQS event source mappings for your AWS Lambda processors by adding the required import. This import provides the CDK constructs needed to connect AWS Lambda functions directly to Amazon SQS queues, enabling automatic message processing with built-in retry logic, dead letter queue handling, and scaling based on queue depth. Without this import, your processors cannot receive messages from the Amazon SQS queues in your order processing pipeline.
+
+Add this import to your /project/cdk-backend/cdk_backend/cdk_backend_stack.py (search for "TODO: Lab 3.1"):
+
+1
+2
+# Add this import with the other AWS imports below the comment block for Lab 3.1
+aws_lambda_event_sources as lambda_event_sources
+
+AWS Lambda Event Sources Import
+Enables Amazon SQS event source mappings to automatically trigger AWS Lambda functions when messages arrive. Handles polling, batching, error handling, and scaling.
+Add after your existing Lambda environment setup (search for "TODO: Lab 3.1"):
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+        # Update lambda_environment to include new resources
+        lambda_environment.update({
+            "EVENT_BUS_NAME": ecommerce_bus.event_bus_name,
+            "INVENTORY_QUEUE_URL": inventory_queue.queue_url,
+            "PAYMENT_QUEUE_URL": payment_queue.queue_url,
+            "FULFILLMENT_QUEUE_URL": fulfillment_queue.queue_url,
+        })
+
+        # Cart event handler
+        cart_handler = _lambda.Function(
+            self, "CNS203CartHandler",
+            function_name="CNS203-cart-handler",
+            runtime=_lambda.Runtime.PYTHON_3_13,
+            architecture=_lambda.Architecture.ARM_64,
+            handler="cart_event_handler.lambda_handler",
+            code=_lambda.Code.from_asset("./lambda/functions/cart_event_handler"),
+            layers=[powertools_layer],
+            environment=lambda_environment,
+            timeout=Duration.seconds(30),
+            tracing=_lambda.Tracing.ACTIVE,
+            log_group=shared_log_group,
+        )
+
+        # Checkout event handler
+        checkout_handler = _lambda.Function(
+            self, "CNS203CheckoutHandler",
+            function_name="CNS203-checkout-handler",
+            runtime=_lambda.Runtime.PYTHON_3_13,
+            architecture=_lambda.Architecture.ARM_64,
+            handler="checkout_event_handler.lambda_handler",
+            code=_lambda.Code.from_asset("./lambda/functions/checkout_event_handler"),
+            layers=[powertools_layer],
+            environment=lambda_environment,
+            timeout=Duration.seconds(30),
+            tracing=_lambda.Tracing.ACTIVE,
+            log_group=shared_log_group,
+        )
+
+        # Inventory processor
+        inventory_processor = _lambda.Function(
+            self, "CNS203InventoryProcessor",
+            function_name="CNS203-inventory-processor",
+            runtime=_lambda.Runtime.PYTHON_3_13,
+            architecture=_lambda.Architecture.ARM_64,
+            handler="inventory_processor.lambda_handler",
+            code=_lambda.Code.from_asset("./lambda/functions/inventory_processor"),
+            layers=[powertools_layer],
+            environment=lambda_environment,
+            timeout=Duration.seconds(60),
+            tracing=_lambda.Tracing.ACTIVE,
+            log_group=shared_log_group,
+        )
+
+        # Payment processor
+        payment_processor = _lambda.Function(
+            self, "CNS203PaymentProcessor",
+            function_name="CNS203-payment-processor",
+            runtime=_lambda.Runtime.PYTHON_3_13,
+            architecture=_lambda.Architecture.ARM_64,
+            handler="payment_processor.lambda_handler",
+            code=_lambda.Code.from_asset("./lambda/functions/payment_processor"),
+            layers=[powertools_layer],
+            environment=lambda_environment,
+            timeout=Duration.seconds(60),
+            tracing=_lambda.Tracing.ACTIVE,
+            log_group=shared_log_group,
+        )
+
+        # Fulfillment processor
+        fulfillment_processor = _lambda.Function(
+            self, "CNS203FulfillmentProcessor",
+            function_name="CNS203-fulfillment-processor",
+            runtime=_lambda.Runtime.PYTHON_3_13,
+            architecture=_lambda.Architecture.ARM_64,
+            handler="fulfillment_processor.lambda_handler",
+            code=_lambda.Code.from_asset("./lambda/functions/fulfillment_processor"),
+            layers=[powertools_layer],
+            environment=lambda_environment,
+            timeout=Duration.seconds(60),
+            tracing=_lambda.Tracing.ACTIVE,
+            log_group=shared_log_group,
+        )
+
+Lambda Function Configuration
+AWS Lambda Functions use Python 3.13 and ARM64 for 34% better price-performance. Shared PowerTools layer reduces cold starts. Environment variables provide access to Amazon DynamoDB, Amazon SQS, and Amazon EventBridge. Handlers: 30s timeout, Processors: 60s timeout.
+Lab 3.2: Add Amazon EventBridge Rules and Amazon SQS Triggers
+Why this step matters: This step completes the event-driven architecture by connecting Amazon EventBridge events to AWS Lambda handlers and setting up Amazon SQS triggers for the processing pipeline. Amazon EventBridge rules use pattern matching to route specific events to the appropriate AWS Lambda functions, while Amazon SQS event sources provide reliable message processing with automatic retry and dead letter queue handling. The AWS IAM permissions ensure secure access between all services while following the principle of least privilege.
+
+Add after your AWS Lambda function definitions (search for "TODO: Lab 3.2"):
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+        # Amazon EventBridge rules for event routing
+        cart_rule = events.Rule(
+            self, "CNS203CartRule",
+            event_bus=ecommerce_bus,
+            event_pattern=events.EventPattern(
+                source=["CNS203.cart"],
+                detail_type=["POST Cart Operation", "PUT Cart Operation", "DELETE Cart Operation"]
+            )
+        )
+        cart_rule.add_target(targets.LambdaFunction(cart_handler))
+
+        checkout_rule = events.Rule(
+            self, "CNS203CheckoutRule",
+            event_bus=ecommerce_bus,
+            event_pattern=events.EventPattern(
+                source=["CNS203.checkout"],
+                detail_type=["Checkout Started"]
+            )
+        )
+        checkout_rule.add_target(targets.LambdaFunction(checkout_handler))
+
+        # Amazon SQS event sources for reliable processing
+        inventory_processor.add_event_source(
+            lambda_event_sources.SqsEventSource(inventory_queue, batch_size=1)
+        )
+        payment_processor.add_event_source(
+            lambda_event_sources.SqsEventSource(payment_queue, batch_size=1)
+        )
+        fulfillment_processor.add_event_source(
+            lambda_event_sources.SqsEventSource(fulfillment_queue, batch_size=1)
+        )
+
+        # Amazon DynamoDB permissions for data access
+        cart_table.grant_read_write_data(cart_handler)
+        cart_table.grant_read_write_data(checkout_handler)
+        orders_table.grant_read_write_data(checkout_handler)
+        orders_table.grant_read_write_data(inventory_processor)
+        orders_table.grant_read_write_data(payment_processor)
+        orders_table.grant_read_write_data(fulfillment_processor)
+        cart_table.grant_read_write_data(payment_processor)
+        orders_table.grant_read_data(checkout_status_function)
+
+        # Amazon SQS permissions for message flow
+        inventory_queue.grant_send_messages(checkout_handler)
+        inventory_queue.grant_consume_messages(inventory_processor)
+        payment_queue.grant_send_messages(inventory_processor)
+        payment_queue.grant_consume_messages(payment_processor)
+        fulfillment_queue.grant_send_messages(payment_processor)
+        fulfillment_queue.grant_consume_messages(fulfillment_processor)
+
+        # Idempotency table access for all functions
+        idempotency_table.grant_read_write_data(cart_handler)
+        idempotency_table.grant_read_write_data(checkout_handler)
+        idempotency_table.grant_read_write_data(inventory_processor)
+        idempotency_table.grant_read_write_data(payment_processor)
+        idempotency_table.grant_read_write_data(fulfillment_processor)
+
+        # Amazon EventBridge permissions for event publishing
+        ecommerce_bus.grant_put_events_to(cart_handler)
+
+Event-Driven Processing Pipeline
+Amazon EventBridge rules route events by pattern matching. Amazon SQS event sources trigger processors with batch_size=1. AWS IAM permissions follow least privilege. Idempotency table prevents duplicate processing. Fully serverless with automatic scaling.
+Understanding the Event Flow
+Complete Architecture Flow: Amazon API Gateway → Amazon EventBridge → AWS Lambda → Amazon SQS → Processors
+
+This event-driven architecture enables your e-commerce system to handle orders asynchronously while providing immediate user feedback. Each stage serves a specific purpose in creating a scalable, reliable order processing system.
+
+Stage	Technology	Benefit	Role in E-Commerce
+API Response	Amazon EventBridge	Immediate (~50ms)	Customer gets instant checkout confirmation
+Event Routing	AWS Lambda Handlers	Smart processing	Business logic without blocking APIs
+Reliable Queuing	Amazon SQS Triggers	Guaranteed delivery	Orders never lost, automatic retries
+Observability	Amazon CloudWatch	Full visibility	Monitor order completion rates
+Deploy the Complete Infrastructure
+Deploy all infrastructure updates:
+
+1
+2
+cd /project/cdk-backend
+cdk deploy --require-approval never
+
+Deployment Process (3-5 minutes)
+
+What happens during deployment:
+
+Amazon EventBridge Rules: CDK creates pattern-matching rules to route events to AWS Lambda functions
+AWS Lambda Event Sources: Amazon SQS queues are connected to AWS Lambda processors with automatic scaling
+AWS IAM Role Updates: Permissions are granted for secure service-to-service communication
+Amazon SQS Queue Configuration: Dead letter queues and visibility timeouts are configured for reliability
+Resource Linking: All components are wired together to form the complete processing pipeline
+Watch the Deployment: While deploying, observe:
+
+Amazon EventBridge rules being created for event routing
+AWS Lambda event source mappings for Amazon SQS integration
+AWS IAM role updates for secure access
+Amazon SQS queue configurations with DLQ setup
+Verify Setup
+Amazon EventBridge Console Verification
+What You're Verifying: Amazon EventBridge rules determine how events are routed to processing functions. Proper rule configuration ensures cart and checkout events reach the right handlers.
+
+Navigate to Amazon EventBridge Console 
+Custom Event Buses → Click "Custom event buses" in left navigation
+Find Event Bus → Click on CNS203-ecommerce-bus from the list
+Access Rules → Click the "Rules" tab at the top of the event bus details page
+Verify Rules: Confirm 3 rules exist (catch-all, cart, checkout) with proper targets
+Check Targets: Click on each rule name to see AWS Lambda function ARNs as targets
+Expected Result: Cart rule matches POST/PUT/DELETE operations, checkout rule matches "Checkout Started" events
+AWS Lambda Console Verification
+What You're Verifying: AWS Lambda functions need proper event sources and environment variables to process orders correctly. Amazon SQS triggers enable automatic message processing.
+
+Navigate to AWS Lambda Console 
+Functions List: Confirm all 6 functions exist (cart-handler, checkout-handler, 3 processors, status-function)
+Event Sources: Click each processor function and verify Amazon SQS trigger configuration
+Environment Variables: Check functions have required table names and queue URLs
+Expected Configuration: Each processor should have one Amazon SQS trigger, handlers should have Amazon EventBridge triggers
+Amazon SQS Console Verification
+What You're Verifying: Amazon SQS queues provide reliable message delivery between processing stages. Dead letter queues capture failed messages for debugging.
+
+Navigate to Amazon SQS Console 
+Queue List: Confirm 6 queues exist (3 main + 3 DLQ)
+AWS Lambda Triggers: Each main queue should show "Lambda" in the "Lambda triggers" column
+Dead Letter Queues: Verify DLQ configuration with max receive count of 3
+Expected Setup: Inventory, payment, and fulfillment queues each have associated DLQs and AWS Lambda triggers
+System Readiness: After completing this lab, your infrastructure demonstrates event-driven processing with full serverless capabilities:
+
+Automatic Scaling: AWS Lambda functions scale from zero to 1000+ concurrent executions based on Amazon EventBridge events and Amazon SQS queue depth, with AWS handling all scaling decisions without manual intervention
+Error Resilience: Failed messages automatically retry with exponential backoff and move to dead letter queues after 3 attempts, with AWS managing all retry logic and error handling infrastructure
+Cost Optimization: True pay-per-use pricing with no idle costs - you pay only for actual request processing time (billed in 1ms increments), storage consumed, and data transfer, with automatic cost optimization during low-traffic periods
+Zero Server Management: AWS handles all server provisioning, patching, scaling, and maintenance across Amazon EventBridge, Amazon SQS, AWS Lambda, and Amazon DynamoDB, eliminating operational overhead
+Monitoring: Amazon CloudWatch provides comprehensive observability across all services with automatic metric collection and no additional infrastructure to manage
+Security: Least-privilege AWS IAM permissions protect your data and operations, with AWS managing underlying security infrastructure and compliance
+Lab 3 Achievement Summary
+
+Congratulations! You've successfully built and deployed a complete event-driven e-commerce backend with:
+
+Direct Amazon EventBridge Integration: API responses in ~50ms while processing happens asynchronously
+Asynchronous Processing Pipeline: Inventory → Payment → Fulfillment chain scales independently
+Comprehensive Error Handling: Dead letter queues capture failed messages for analysis
+Real-time Status Tracking: Orders can be monitored through their complete lifecycle
+Comprehensive Observability: Logging and tracing provide full system visibility
+Workshop Patterns: Idempotency, retry logic, and proper AWS IAM security
+Architecture Achievement: Your serverless e-commerce backend demonstrates event-driven patterns with sub-100ms API response times and reliable order processing. The event-driven design shows how each component can scale independently based on demand - from zero during quiet periods to thousands of concurrent operations during peak traffic, all without server provisioning or capacity planning. This serverless architecture provides automatic cost optimization (paying only for actual usage), zero server management overhead, and built-in high availability across all AWS services. The system can handle viral traffic spikes or seasonal shopping surges without manual intervention, while automatically scaling down to minimize costs during low-traffic periods.
+
+Troubleshooting Your CDK Implementation
+If you're experiencing errors with your CDK file, you can validate your implementation against the complete file below. This reference includes all changes from Labs 1-3 and can help you identify any missing imports, configuration issues, or syntax errors.
+Complete cdk_backend_stack.py with all Lab 1-3 changes
+Ready for the next step? Your event-driven backend is now complete and ready to handle asynchronous order processing. In Lab 4, you'll enhance the frontend with optimistic updates to create a seamless user experience that works perfectly with your new async architecture.
+
