@@ -1153,3 +1153,186 @@ Workshop Achievement: This enhanced frontend effectively demonstrates how to cre
 Optional: Manual Implementation Details
 Ready for advanced observability? Your complete event-driven e-commerce system now provides both excellent user experience and robust backend processing. In the optional Lab 5, you'll explore how to monitor and analyze your distributed system using Amazon CloudWatch Application Signals.
 
+
+
+
+Lab 5 - Observability with Amazon CloudWatch Application Signals (Optional)
+Estimated Duration: 10 minutes
+Lab Type: Optional
+
+Where you are: You've successfully built a complete event-driven e-commerce system with optimistic UI updates and asynchronous order processing. Your system is functional, but you need visibility into how requests flow through your distributed architecture and where potential bottlenecks might occur.
+
+What you'll accomplish: Explore Amazon CloudWatch Application Signals to gain deep observability into your event-driven system. You'll generate application traffic, analyze distributed traces that show complete request journeys, and use trace maps to visualize service dependencies and performance patterns.
+
+End goal: Comprehensive understanding of your system's behavior through distributed tracing, enabling you to identify performance bottlenecks, understand service dependencies, and monitor the health of your event-driven architecture in real-time.
+
+Prerequisites
+Completed Lab 4: React Frontend Optimistic Updates
+Access to AWS Console 
+React frontend deployed and accessible
+Introduction to Amazon CloudWatch Application Signals
+Amazon CloudWatch Application Signals automatically instruments your applications, providing:
+
+Automatic tracing for AWS services (AWS Lambda, Amazon API Gateway, Amazon DynamoDB, Amazon SQS, Amazon EventBridge)
+Distributed traces that follow requests across service boundaries
+Trace maps showing visual request flow and timing
+Performance insights including latency, errors, and bottlenecks
+Zero-code setup for AWS managed services
+Why this matters: In event-driven architectures, understanding request flow across asynchronous components is crucial. Traditional monitoring shows individual service metrics, but distributed tracing reveals how a single user action cascades through multiple services and where time is spent.
+
+Lab 5.1: Generate Application Traffic
+Access Your Frontend Application
+Open React Frontend: Navigate to your CloudFront URL in a web browser
+Verify Application Load: Ensure the unicorn e-commerce site loads properly
+Create Cart Activity
+Browse Product Catalog:
+
+View available unicorn products
+Explore different product categories
+Add Items to Cart:
+
+Add 2-3 different items to your cart
+Vary quantities (1, 2, 3 items per product)
+Create different request patterns
+Sample cart
+
+Complete Checkout Process
+Initiate Checkout:
+Click "Checkout" button
+Fill in customer information fields
+Auto-generate customer data
+
+Submit Order:
+Complete the checkout form
+Submit the order
+Wait for success confirmation
+Successful order
+
+Generate Multiple Traces
+Why Multiple Traces Matter: Different user interactions create different trace patterns. By generating various scenarios, you'll see how your event-driven architecture handles different workloads and can identify patterns in performance and behavior.
+
+Repeat Process: Complete 2-3 full checkout flows with different scenarios
+Vary Parameters:
+Different product combinations (1 item vs multiple items)
+Different quantities (single vs bulk orders)
+Mix cart operations (add, update, remove items)
+Create Trace Data: Each interaction generates distributed traces across services
+Expected Trace Flow: Amazon API Gateway → Amazon EventBridge → Amazon SQS → AWS Lambda processors → Amazon DynamoDB operations
+
+What You'll Observe: Simple cart additions create shorter traces, while checkout operations create complex multi-service traces showing the complete order processing pipeline.
+
+Lab 5.2: Navigate to Amazon CloudWatch Traces
+Access CloudWatch Console
+Navigate to Amazon CloudWatch Application Signals 
+Find Application Signals: Scroll down in the left navigation panel
+Click on Traces: Access your distributed traces view
+App signals menu
+
+Configure Trace View
+Set Time Range:
+
+Use the time picker in the top-right
+Select "Last 15 minutes"
+This shows traces from your recent interactions
+Review Trace List:
+
+Each row represents a complete user request
+Traces flow through your event-driven architecture
+AWS services automatically capture this data
+Traces overview
+
+Understanding Trace Data in Your System
+
+What makes Amazon CloudWatch Application Signals powerful for event-driven architectures:
+
+Automatic Capture: No code changes required - AWS services automatically instrument themselves
+Complete Journey: Full request flow through your distributed e-commerce system from API call to order completion
+Real-time Data: Recent interactions appear within minutes, enabling near real-time debugging
+Event Context: Traces capture Amazon EventBridge event details, Amazon SQS message processing, and AWS Lambda execution context
+Business Correlation: Connect technical traces to business outcomes like successful order processing
+Lab 5.3: Analyze Your Distributed Traces
+Why Distributed Tracing Matters
+In event-driven architectures, a single user action triggers multiple asynchronous processes across different services. Distributed tracing reveals the complete journey of each request, including timing relationships, error propagation, and service dependencies.
+Locate Recent Checkout Trace
+Filter by Time: Set to "Last 15 minutes" to see your test data
+Sort by Timestamp: Newest traces appear at the top
+Identify Checkout: Look for traces with multiple spans (5+ services)
+Open Trace: Click on a trace row to view the detailed timeline
+Sample trace
+
+Understanding Trace Performance
+When analyzing your traces, look for typical timing patterns: Amazon API Gateway responses should be under 100ms, Amazon EventBridge routing adds 10-20ms overhead, and AWS Lambda handlers typically execute in 100-500ms. Background processors may take 1-5 seconds for complex operations like payment authorization.
+
+Focus on span duration to identify slow operations, examine metadata to understand which specific resources are involved, and trace request IDs to follow individual orders through the system. Error details in failed spans show exact failure points, while parent-child relationships reveal your processing flow.
+
+Your event-driven architecture creates both sequential flows (Amazon API Gateway → Amazon EventBridge → AWS Lambda) that must happen in order, and parallel processing (multiple Amazon SQS processors) that can run simultaneously. Long spans often indicate bottlenecks in Amazon DynamoDB queries or AWS Lambda cold starts (when functions haven't been invoked recently and need to initialize).
+
+Lab 5.4: Explore the Amazon CloudWatch Trace Map
+Understanding Trace Maps
+While the timeline view shows when things happen, the trace map provides a visual representation of how services connect and communicate within a specific request.
+Access the Trace Map
+Within your open trace, look for a "Map" or "Trace map" tab/view
+This shows a visual diagram of the services involved in this specific request
+Trace map
+
+Reading the Trace Map
+The trace map shows services as nodes (boxes/circles) connected by lines representing data flow. Green indicates healthy services while red shows errors. Node size and color intensity reflect processing time.
+
+Your request flow starts at Amazon API Gateway (entry point), includes synchronous AWS Lambda execution for immediate responses, and branches into asynchronous background processing through Amazon EventBridge → Amazon SQS → AWS Lambda chains. Amazon DynamoDB operations appear as data layer interactions.
+
+Key questions to explore: Which services participate in different operations (cart vs checkout)? How does asynchronous processing branch from inventory to payment to fulfillment? Where do requests spend the most time, and how do failures in one service affect downstream processing?
+
+Lab 5.5: Analyze Service Dependencies
+Understanding Your E-Commerce Flow
+Cart Operations Flow:
+
+User adds item → Amazon API Gateway
+Amazon API Gateway → AWS Lambda (cart handler)
+AWS Lambda → Amazon DynamoDB (update cart)
+Response back to user
+Checkout Operations Flow:
+
+User submits order → Amazon API Gateway
+Amazon API Gateway → AWS Lambda (checkout handler)
+AWS Lambda → Amazon EventBridge (order event)
+Amazon EventBridge → Multiple Amazon SQS queues
+Amazon SQS → AWS Lambda processors (inventory, payment, fulfillment)
+Each processor → Amazon DynamoDB operations
+Service Dependencies
+Your system has clear dependency patterns: Amazon API Gateway serves as the entry point with no dependencies, but its failure makes the entire system unavailable. Cart operations depend only on Amazon DynamoDB, while checkout operations require both Amazon EventBridge and Amazon DynamoDB. Amazon EventBridge failures stop all async processing, Amazon SQS issues cause processing delays, and Amazon DynamoDB problems affect data operations across the system.
+
+Understanding these dependencies helps you prioritize monitoring and design resilience strategies. Critical path components like Amazon API Gateway and Amazon DynamoDB require the highest availability, while individual processor failures only affect specific order steps.
+
+Lab 5.6: AWS Lambda Performance Optimization Insights
+Performance Optimization
+Common performance issues include AWS Lambda cold start delays when functions haven't been invoked recently (address with provisioned concurrency for predictable performance, though this changes the serverless cost model from pure pay-per-use to reserved capacity), database latency from inefficient Amazon DynamoDB queries (optimize partition keys and use Amazon DynamoDB's automatic scaling capabilities), queue processing delays (AWS Lambda automatically scales concurrency based on Amazon SQS queue depth, but you can adjust reserved concurrency limits), and complex Amazon EventBridge rules (simplify patterns to reduce event routing overhead).
+
+Monitor key metrics: Amazon API Gateway response times should stay under 200ms (investigate if over 500ms - Amazon API Gateway automatically scales but may throttle under extreme load), AWS Lambda duration under 1000ms (optimize if over 3000ms - longer execution times increase costs in the pay-per-use model), Amazon DynamoDB latency under 50ms (review queries if over 100ms - Amazon DynamoDB auto-scales read/write capacity but inefficient queries still impact performance), and queue processing under 30 seconds (AWS Lambda processors scale automatically based on queue depth, but complex processing may require timeout adjustments).
+
+Serverless Cost Optimization: In serverless architectures, performance directly impacts cost. Faster AWS Lambda functions consume fewer compute resources and cost less per execution. Efficient Amazon DynamoDB queries reduce read/write capacity consumption. Optimized Amazon EventBridge rules reduce event processing overhead. The pay-per-use model means performance improvements translate directly to cost savings.
+
+Key Takeaways
+You now have comprehensive observability into your event-driven e-commerce system, with complete visibility into request journeys across all services, performance insights for identifying bottlenecks, precise error tracking in your distributed system, and clear dependency mapping showing service relationships.
+
+Your event-driven architecture insights include visualizing async event flow, understanding service isolation and failure impacts, identifying scalability patterns for independent scaling, and recognizing parallel vs sequential processing opportunities.
+
+CloudWatch Application Signals provides automatic instrumentation and distributed tracing that reveals how user actions flow through your serverless architecture, enabling data-driven optimization and proactive issue resolution.
+
+Lab 5.7: Key Insights and Takeaways
+What You've Learned
+Amazon CloudWatch Application Signals provides zero-configuration observability for AWS services, automatically instrumenting your event-driven architecture without code changes or additional infrastructure to manage. This serverless monitoring approach scales automatically with your application and charges only for actual metrics and logs consumed. Distributed tracing reveals complete request journeys from frontend clicks to backend completion, while trace maps visualize service interactions and dependencies across your serverless architecture.
+
+Your asynchronous processing pipeline becomes visible through queue and processor flow analysis, showing how orders move from inventory checks through payment authorization to fulfillment. This observability connects technical metrics to business outcomes like order completion rates and customer satisfaction, while also revealing serverless scaling patterns - you can see how AWS Lambda functions scale up during traffic spikes and scale down during quiet periods, directly correlating with your cost optimization.
+
+Performance Analysis
+Target span durations under 500ms to avoid order processing delays, maintain consistent service timing patterns to identify systematic issues, and keep error rates below 1% to prevent performance degradation. Focus on warm AWS Lambda executions (when functions are already initialized) for optimal processing speed and monitor order completion rates as your key business metric.
+
+Workshop Achievement Summary
+Congratulations! You've built a complete event-driven e-commerce system that demonstrates serverless patterns used by modern e-commerce platforms.
+
+Your system achieves sub-100ms API response times through Amazon EventBridge integration, handles orders without blocking users via Amazon SQS + AWS Lambda processing pipelines that automatically scale from zero to thousands of concurrent operations, and provides complete system observability through zero-configuration Amazon CloudWatch Application Signals monitoring. The serverless architecture eliminates server management overhead while providing automatic scaling, built-in high availability, and pay-per-use cost optimization.
+
+The optimistic UI updates create a professional user experience, while error handling and idempotency ensure robust order processing across distributed serverless components. Most importantly, you now understand how distributed monitoring reveals the behavior of complex event-driven architectures, including serverless scaling patterns, cost optimization opportunities, and performance characteristics that are unique to serverless computing models.
+
+Workshop Impact
+The patterns you've implemented demonstrate techniques used by e-commerce platforms to handle orders while maintaining responsive user experiences and reliable order processing.
