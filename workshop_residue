@@ -1336,3 +1336,45 @@ The optimistic UI updates create a professional user experience, while error han
 
 Workshop Impact
 The patterns you've implemented demonstrate techniques used by e-commerce platforms to handle orders while maintaining responsive user experiences and reliable order processing.
+
+
+
+
+Workshop Conclusion
+Congratulations!
+You have successfully completed CNS203: Building your first event driven application!
+
+What You've Accomplished
+Achievement	Technology	Impact
+Architecture Transform	Amazon EventBridge Integration	Modern event-driven system
+Eliminated Cold Starts	Direct API Integration	Sub-100ms responses
+Resilient Processing	SQS + Lambda	Reliable async workflows
+Enhanced User Experience	Optimistic Updates	Immediate user feedback
+Observability	CloudWatch Signals	Comprehensive monitoring
+Key Benefits Achieved
+Your final architecture provides:
+
+Sub-100ms API Response Times: Immediate responses via Amazon EventBridge integration
+Infinite Scalability: Event-driven processing handles traffic spikes automatically
+Fault Tolerance: Dead letter queues and retry mechanisms ensure reliability
+Serverless Benefits: Pay-per-use components demonstrate cost efficiency
+Workshop Experience: Clean separation of concerns and comprehensive observability
+Architecture Transformation
+You've successfully transformed from:
+
+Before: Amazon API Gateway → AWS Lambda → Processing (200ms+ latency)
+After: Amazon API Gateway → Amazon EventBridge → Async Processing (~50ms latency)
+Next Steps
+To continue your serverless journey:
+
+Deep Dive into EDA: Complete the Building Event-Driven Architectures on AWS  workshop
+Explore Advanced Patterns: Check out Serverless Land 
+Learn More About Amazon EventBridge: Review Amazon EventBridge documentation 
+Apply Learnings: Consider these patterns for your applications
+Resource Management
+Good news! All resources will be automatically cleaned up when the workshop session ends. While it's generally recommended to clean up AWS resources after use, in this workshop environment you don't need to take any further action.
+
+Thank You!
+Thank you for participating in this workshop. We hope you found it valuable and will apply these event-driven patterns in your future serverless applications.
+
+Happy building!
