@@ -41,6 +41,9 @@ from aws_cdk import (
     # TODO: Lab 1.1 - Add EventBridge and SQS imports below this comment block
     #
     ############################################################################
+    aws_events as events,
+    aws_events_targets as targets,
+    aws_sqs as sqs,
 
 
 )
@@ -330,6 +333,78 @@ function handler(event) {
         ############################################################################
 
 
+
+        # Amazon EventBridge custom bus for e-commerce events
+        ecommerce_bus = events.EventBus(
+            self, "CNS203ECommerceBus",
+            event_bus_name="CNS203-ecommerce-bus",
+            description="Custom event bus for CNS203 e-commerce events"
+        )
+
+        # Amazon SQS queues for async processing
+        inventory_queue = sqs.Queue(
+            self, "CNS203InventoryQueue",
+            queue_name="CNS203-inventory-queue",
+            visibility_timeout=Duration.seconds(300),
+            dead_letter_queue=sqs.DeadLetterQueue(
+                max_receive_count=3,
+                queue=sqs.Queue(
+                    self, "CNS203InventoryDLQ",
+                    queue_name="CNS203-inventory-dlq"
+                )
+            )
+        )
+
+        payment_queue = sqs.Queue(
+            self, "CNS203PaymentQueue",
+            queue_name="CNS203-payment-queue",
+            visibility_timeout=Duration.seconds(300),
+            dead_letter_queue=sqs.DeadLetterQueue(
+                max_receive_count=3,
+                queue=sqs.Queue(
+                    self, "CNS203PaymentDLQ",
+                    queue_name="CNS203-payment-dlq"
+                )
+            )
+        )
+
+        fulfillment_queue = sqs.Queue(
+            self, "CNS203FulfillmentQueue",
+            queue_name="CNS203-fulfillment-queue",
+            visibility_timeout=Duration.seconds(300),
+            dead_letter_queue=sqs.DeadLetterQueue(
+                max_receive_count=3,
+                queue=sqs.Queue(
+                    self, "CNS203FulfillmentDLQ",
+                    queue_name="CNS203-fulfillment-dlq"
+                )
+            )
+        )
+
+        # Create a catch-all rule to log all events for validation
+        catch_all_rule = events.Rule(
+            self, "CNS203CatchAllRule",
+            event_bus=ecommerce_bus,
+            rule_name="CNS203-catch-all-logging",
+            description="Catch-all rule to log all events to CloudWatch for validation",
+            event_pattern=events.EventPattern(
+                account=[self.account]
+            )
+        )
+
+        # Add CloudWatch Logs target for the catch-all rule
+        catch_all_rule.add_target(
+            targets.CloudWatchLogGroup(
+                log_group=logs.LogGroup(
+                    self, "CNS203EventBusLogGroup",
+                    log_group_name="/aws/events/CNS203-ecommerce-bus",
+                    retention=logs.RetentionDays.ONE_WEEK,
+                    removal_policy=RemovalPolicy.DESTROY,
+                )
+            )
+        )
+
+
         # Create Lambda layer for third-party dependencies with CNS203 prefix
         powertools_layer = _lambda.LayerVersion(
             self, "CNS203PowertoolsLayer",
@@ -344,7 +419,19 @@ function handler(event) {
         # TODO: Lab 1.2 - Add EventBridge integration role here
         #
         ############################################################################
-
+        # EventBridge integration role for API Gateway
+        eventbridge_role = iam.Role(
+            self, "CNS203EventBridgeRole",
+            assumed_by=iam.ServicePrincipal("apigateway.amazonaws.com"),
+            inline_policies={
+                "EventBridgePolicy": iam.PolicyDocument(
+                    statements=[iam.PolicyStatement(
+                        actions=["events:PutEvents"],
+                        resources=[ecommerce_bus.event_bus_arn]
+                    )]
+                )
+            }
+        )
 
         # Common Lambda function configuration
         lambda_environment = {
@@ -410,7 +497,30 @@ function handler(event) {
         # TODO: Lab 1.4 - Add Checkout Status API Endpoint here
         #
         ############################################################################
+        # Checkout Status Lambda Function (for status polling)
+        checkout_status_function = _lambda.Function(
+            self, "CNS203CheckoutStatusFunction",
+            function_name="CNS203-checkout-status-function",
+            runtime=_lambda.Runtime.PYTHON_3_13,
+            architecture=_lambda.Architecture.ARM_64,
+            handler="checkout_status_function.lambda_handler",
+            code=_lambda.Code.from_asset("./lambda/functions/checkout_status_function"),
+            layers=[powertools_layer],
+            environment=lambda_environment,
+            timeout=Duration.seconds(30),
+            memory_size=512,
+            tracing=_lambda.Tracing.ACTIVE,
+            log_group=shared_log_group,
+        )
 
+        # Grant read access to orders table
+        orders_table.grant_read_data(checkout_status_function)
+
+        # Create API Gateway integration for status checking
+        checkout_status_integration = apigateway.LambdaIntegration(
+            checkout_status_function,
+            request_templates={"application/json": '{"statusCode": "200"}'}
+        )
 
 
         # Grant DynamoDB permissions to Lambda functions
@@ -443,38 +553,102 @@ function handler(event) {
         #
         ############################################################################
 
+           # Create API resources and methods
+        # Cart resource
+        cart_resource = api.root.add_resource("cart")
+
+        # Checkout resource
+        checkout_resource = api.root.add_resource("checkout")
+
+        # Common CORS response parameters
+        cors_response_parameters = {
+            "method.response.header.Access-Control-Allow-Origin": "'*'",
+            "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,x-user-id,X-User-Id'",
+            "method.response.header.Access-Control-Allow-Methods": "'GET,POST,PUT,DELETE,OPTIONS'"
+        }
+
+        # Cart EventBridge integration (replaces Lambda integration)
+        cart_integration = apigateway.AwsIntegration(
+            service="events",
+            action="PutEvents",
+            integration_http_method="POST",
+            options=apigateway.IntegrationOptions(
+                credentials_role=eventbridge_role,
+                request_parameters={
+                    "integration.request.header.X-Amz-Target": "'AWSEvents.PutEvents'",
+                    "integration.request.header.Content-Type": "'application/x-amz-json-1.1'"
+                },
+                request_templates={
+                    "application/json": '{"Entries":[{"Source":"CNS203.cart","DetailType":"$context.httpMethod Cart Operation","Detail":"{\\"userId\\":\\"$input.params(\'x-user-id\')\\",\\"httpMethod\\":\\"$context.httpMethod\\",\\"requestId\\":\\"$context.requestId\\",\\"body\\":$util.escapeJavaScript($input.json(\'$\'))}","EventBusName":"CNS203-ecommerce-bus"}]}'
+                },
+                integration_responses=[
+                    apigateway.IntegrationResponse(
+                        status_code="202",
+                        response_templates={
+                            "application/json": '{"message":"Cart operation submitted","requestId":"$context.requestId"}'
+                        },
+                        response_parameters=cors_response_parameters
+                    )
+                ]
+            )
+        )
+
+        # Checkout EventBridge integration
+        checkout_integration = apigateway.AwsIntegration(
+            service="events",
+            action="PutEvents",
+            integration_http_method="POST",
+            options=apigateway.IntegrationOptions(
+                credentials_role=eventbridge_role,
+                request_parameters={
+                    "integration.request.header.X-Amz-Target": "'AWSEvents.PutEvents'",
+                    "integration.request.header.Content-Type": "'application/x-amz-json-1.1'"
+                },
+                request_templates={
+                    "application/json": '{"Entries":[{"Source":"CNS203.checkout","DetailType":"Checkout Started","Detail":"{\\"userId\\":\\"$input.params(\'x-user-id\')\\",\\"httpMethod\\":\\"$context.httpMethod\\",\\"requestId\\":\\"$context.requestId\\",\\"body\\":$util.escapeJavaScript($input.json(\'$\'))}","EventBusName":"CNS203-ecommerce-bus"}]}'
+                },
+                integration_responses=[
+                    apigateway.IntegrationResponse(
+                        status_code="202",
+                        response_templates={
+                            "application/json": '{"message":"Checkout submitted for processing","requestId":"$context.requestId","status":"processing"}'
+                        },
+                        response_parameters=cors_response_parameters
+                    )
+                ]
+            )
+        )
+
         # Create API Gateway integrations
         modify_cart_integration = apigateway.LambdaIntegration(
             modify_cart_function,
             request_templates={"application/json": '{"statusCode": "200"}'}
         )
 
-        checkout_integration = apigateway.LambdaIntegration(
-            checkout_function,
-            request_templates={"application/json": '{"statusCode": "200"}'}
+        # Update API methods to use EventBridge integrations
+        # Common method response parameters
+        cors_method_response_parameters = {
+            "method.response.header.Access-Control-Allow-Origin": True,
+            "method.response.header.Access-Control-Allow-Headers": True,
+            "method.response.header.Access-Control-Allow-Methods": True
+        }
+
+        method_response = apigateway.MethodResponse(
+            status_code="202",
+            response_parameters=cors_method_response_parameters
         )
 
+        cart_resource.add_method("POST", cart_integration, method_responses=[method_response])
+        cart_resource.add_method("PUT", cart_integration, method_responses=[method_response])
+        cart_resource.add_method("DELETE", cart_integration, method_responses=[method_response])
+        cart_resource.add_method("GET", modify_cart_integration)  
 
-        ############################################################################
-        #
-        # Create API resources and methods
-        #
-        ############################################################################
+        checkout_resource.add_method("POST", checkout_integration, method_responses=[method_response])
 
-        # Cart resource
-        cart_resource = api.root.add_resource("cart")
-        cart_resource.add_method(
-            "POST", modify_cart_integration)    # Create cart
-        cart_resource.add_method("GET", modify_cart_integration)     # Get cart
-        cart_resource.add_method(
-            "PUT", modify_cart_integration)     # Update cart
-        cart_resource.add_method(
-            "DELETE", modify_cart_integration)  # Delete cart
-
-        # Checkout resource
-        checkout_resource = api.root.add_resource("checkout")
-        checkout_resource.add_method(
-            "POST", checkout_integration)   # Process checkout
+        # Add checkout status endpoint: GET /checkout/status/{requestId}
+        checkout_status_resource = checkout_resource.add_resource("status")
+        checkout_status_request_resource = checkout_status_resource.add_resource("{requestId}")
+        checkout_status_request_resource.add_method("GET", checkout_status_integration)     
         
         
         ############################################################################
